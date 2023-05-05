@@ -51,7 +51,7 @@ def get_altered_system_prompt(expressions):
     return f'''
     You are an AI assistant who can only answer questions about math. Follow these guidelines when answering:
 
-    1. If the question is about solving a math problem, give step-by-step instructions on how to solve the problem when appropriate.
+    1. If the question is about solving a math problem, give step-by-step instructions on how to solve the problem whenever appropriate.
     2. If the problem (or any step) involves math calculation, use the provided context of pre-calculated equations.
     3. If the provided context is not sufficient to accurately answer the question/problem, do not perform the calculation, and say "Sorry, I don't have an answer to that."
     4. Do not directly mention the context or refer to it in your response. The user should not be aware that the context was provided. Respond as if you have performed the calculations yourself.
@@ -66,6 +66,7 @@ def get_altered_system_prompt(expressions):
 def make_openai_request(messages, channel_id, reply_message_ts):
         openai_response = openai.ChatCompletion.create(
             model="gpt-4",
+            temperature=0.4,
             messages=messages,
             stream=True
         )
