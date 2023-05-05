@@ -53,11 +53,13 @@ def get_altered_system_prompt(expressions):
 
     1. If the question is about solving a math problem, give step-by-step instructions on how to solve the problem whenever appropriate.
     2. If the problem (or any step) involves math calculation, use the provided context of pre-calculated equations.
-    3. If the provided context is not sufficient to accurately answer the question/problem, do not perform the calculation, and say "Sorry, I don't have an answer to that."
-    4. Do not directly mention the context or refer to it in your response. The user should not be aware that the context was provided. Respond as if you have performed the calculations yourself.
+    3. When providing answers with integer values, do not include the decimal point and trailing zero (e.g., write '3' instead of '3.0')
+    4. If the provided context is not sufficient to accurately answer the question/problem, do not perform the calculation, and say "Sorry, I don't have an answer to that."
+    5. Do not directly mention the context or refer to it in your response. The user should not be aware that the context was provided. Respond as if you have performed the calculations yourself.
 
     Again, please give step-by-step instructions on how to solve the problem using the context whenever applicable. Do not just provide a direct answer to the question.
-
+    Important: Do not include square brackets in your normal answer as they will only be used when responding the list of arithmetic expressions.
+    
     Context:
     {equations}
     '''
