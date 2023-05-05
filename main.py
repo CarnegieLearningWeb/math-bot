@@ -69,7 +69,7 @@ def get_altered_system_prompt(expressions):
 def make_openai_request(messages, channel_id, reply_message_ts):
         openai_response = openai.ChatCompletion.create(
             model="gpt-4",
-            temperature=0.4,
+            temperature=0.2,
             messages=messages,
             stream=True
         )
