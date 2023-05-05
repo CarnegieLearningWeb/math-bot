@@ -82,7 +82,7 @@ def make_openai_request(messages, channel_id, reply_message_ts):
                 ii = ii + 1
                 response_text += chunk.choices[0].delta.content
                 if response_text.startswith("["):
-                    update_chat(app, channel_id, reply_message_ts, "Performing calculation…")
+                    update_chat(app, channel_id, reply_message_ts, f"Performing calculation{'.' * ((ii % 3) + 1)}")
                 elif ii > N_CHUNKS_TO_CONCAT_BEFORE_UPDATING:
                     update_chat(app, channel_id, reply_message_ts, response_text)
                     ii = 0
@@ -92,7 +92,7 @@ def make_openai_request(messages, channel_id, reply_message_ts):
                     altered_system_prompt = get_altered_system_prompt(response_text)
                     print("altered_system_prompt:\n", altered_system_prompt)
                     messages[0]["content"] = altered_system_prompt
-                    update_chat(app, channel_id, reply_message_ts, "Performing calculation…")
+                    update_chat(app, channel_id, reply_message_ts, f"Performing calculation{'.' * ((ii % 3) + 1)}")
                     make_openai_request(messages, channel_id, reply_message_ts)
                 else:
                     update_chat(app, channel_id, reply_message_ts, response_text)
