@@ -36,6 +36,7 @@ Do not include expressions that cannot be calculated (e.g., algebraic expression
 For the same reason, avoid using mathematical constants or symbols, such as π or e, in the arithmetic expressions. Only use numbers and basic arithmetic operations that Python can interpret with the eval function.
 The equations will be used as context for you to provide an accurate answer to the problem later, so you should strictly follow the response format used in the examples.
 Again, when you provide the list of arithmetic expressions, that should be the entire response, and nothing else should be included in the response.
+Do not include square brackets in your normal answer as they will only be used when responding the list of arithmetic expressions.
 '''
 
 WAIT_MESSAGE = "Got your request. Please wait."
