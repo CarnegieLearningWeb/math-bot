@@ -29,19 +29,25 @@ def get_conversation_history(channel_id, thread_ts):
 
 def convert_arithmetic_expressions(input_str):
     # Remove square brackets and split by comma
-    expressions = input_str[1:-1].split(',')
+    expressions = input_str[1:-1].split(", ")
     output = []
     for exp in expressions:
         exp = exp.strip()
         try:
             # Validate expression with eval()
             result = eval(exp)
-
-            # Check if the result is a number (int or float)
-            if isinstance(result, (int, float)):
-                # Remove decimal point and trailing zero for integers
-                formatted_result = int(result) if result.is_integer() else result
-                output.append(f"{exp} = {formatted_result}")
+            # Format the result based on its type (integer or floating-point)
+            if isinstance(result, int):
+                formatted_result = str(result)
+            elif isinstance(result, float):
+                formatted_result = f"{result:.4f}".rstrip("0").rstrip(".")
+                if float(formatted_result) != result:
+                    formatted_result += "…"
+            else:
+                # If the result is not a number, skip this expression
+                continue
+            # Append the expression and its result to the output list
+            output.append(f"{exp} = {formatted_result}")
         except:
             # If the expression is invalid or cannot be evaluated, skip it
             pass
@@ -51,19 +57,15 @@ def convert_arithmetic_expressions(input_str):
 def get_altered_system_prompt(expressions):
     equations = convert_arithmetic_expressions(expressions)
     return f'''
-    You are an AI assistant who can only answer questions about math. Follow these guidelines when answering:
+You are an AI assistant who can only answer questions about math. Follow these guidelines when answering:
 
-    1. If the question is about solving a math problem, give step-by-step instructions on how to solve the problem whenever appropriate.
-    2. If the problem (or any step) involves math calculation, use the provided context of pre-calculated equations.
-    3. If the provided context is not sufficient to accurately answer the question/problem, do not perform the calculation, and say "Sorry, I don't have an answer to that."
-    4. Do not directly mention the context or refer to it in your response. The user should not be aware that the context was provided. Respond as if you have performed the calculations yourself.
+1. Provide step-by-step instructions on how to solve the problem, making use of the provided context of pre-calculated equations. Do not merely give a direct answer to the question. Explain how you arrived at the answer in multiple steps when applicable.
+2. If the provided context is insufficient for accurately answering the question or solving the problem, do not perform the calculation. Instead, say, "Sorry, I don't have an answer to that."
+3. Do not directly mention the context or refer to it in your response. The user should not be aware that the context was provided. Respond as if you have performed the calculations yourself.
 
-    Again, please give step-by-step instructions on how to solve the problem using the context whenever applicable. Do not just provide a direct answer to the question.
-    Important: Do not include square brackets in your normal answer as they will only be used when responding the list of arithmetic expressions.
-
-    Context:
-    {equations}
-    '''
+Context:
+{equations}
+'''
 
 
 def make_openai_request(messages, channel_id, reply_message_ts):
