@@ -1,5 +1,5 @@
 # MathBot
-A Slack chatbot designed to answer questions about math.
+MathBot is an intelligent Slack chatbot designed to assist users with various math-related questions, offering step-by-step guidance for solving problems and relying on pre-calculated equations to provide accurate answers. MathBot is your go-to companion for all your math inquiries, from basic arithmetic to more complex equations.
 
 ## Features
 - Perform math calculations when needed for accuracy in the response
