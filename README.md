@@ -37,6 +37,10 @@ Before you can run the MathBot, you need to configure the appropriate permission
 4. In the "Scopes" section, you will find two types of scopes: "Bot Token Scopes" and "User Token Scopes". Add the following scopes under "Bot Token Scopes":
    - `app_mentions:read`: Allows the bot to read mention events.
    - `chat:write`: Allows the bot to send messages.
+   - `channels:history`: View messages and other content in public channels the bot has been added to.
+   - `groups:history`: View messages and other content in private channels the bot has been added to.
+   - `mpim:history`: View messages and other content in group direct messages the bot has been added to.
+   - `im:history`: View messages and other content in direct messages the bot has been added to.
 5. Scroll up to the "OAuth Tokens for Your Workspace" and click "Install App To Workspace" button. This will generate the `SLACK_BOT_TOKEN`.
 6. In the left sidebar, click on "Socket Mode" and enable it. You'll be prompted to "Generate an app-level token to enable Socket Mode". Generate a token named `SLACK_APP_TOKEN` and add the `connections:write` scope.
 7. In the "Features affected" section of "Socket Mode" page, click "Event Subscriptions" and toggle "Enable Events" to "On". Add `app_mention` event with the `app_mentions:read` scope in the "Subscribe to bot events" section below the toggle.
