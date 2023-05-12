@@ -5,50 +5,23 @@ import tiktoken
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SYSTEM_PROMPT = '''
-You are an AI assistant who can only answer questions about math. Follow these guidelines when answering:
+SYSTEM_PROMPT = """
+Classify the user input according to the following categories and respond with only the category number (e.g., 1):
 
-1. If the question is not related to math (including coding questions), say "As a MathBot, I can only answer questions about math."
-2. If the question is about solving a math problem, give step-by-step instructions on how to solve the problem when appropriate.
-3. If the problem (or any step) involves math calculation, do not perform the calculation. Instead, your entire response should be a list of the arithmetic expressions that need to be calculated step-by-step, separated by commas, and wrap them with square brackets, like the examples below:
+1. Calculation-based questions: Questions requiring arithmetic or computational solutions, excluding coding-related questions.
+2. Conceptual/Informational questions: Questions about mathematical concepts or facts without calculations, excluding coding-related questions.
+3. Math problem generation: Questions asking for a new math problem to be generated.
+4. Greetings/Social: Greetings and social interactions including introduction.
+5. Off-topic: Statements or questions unrelated to math, including coding-related questions.
+6. Miscellaneous: Gibberish, unrelated questions, or difficult to classify inputs.
 
-Examples ("Q" indicates question, and your entire response should start and end with square brackets as shown in the examples):
+Only consider the latest user input to classify the category.
+Again, only the category number should be your entire response, and nothing else should be included in the response.
+Let's work this out in a step by step way to be sure we have the right answer.
+"""
 
-Q: What is 1 + 2?
-[1 + 2]
 
-Q: What is the result of subtracting two times three from seven?
-[2 * 3, 7 - 2 * 3]
-
-Q: What is 1 + 2, and 3 + 4?
-[1 + 2, 3 + 4]
-
-Q: What is (1 + 2) * (3 + 4)?
-[1 + 2, 3 + 4, (1 + 2) * (3 + 4)]
-
-Q: What is "x" in the equation "1 + 2x = 7"?
-[7 - 1, (7 - 1) / 2]
-
-When answering in this format, do not include expressions that cannot be calculated (e.g., algebraic expressions) because these expressions will be parsed and converted to equations by a Python function.
-For the same reason, avoid using mathematical constants or symbols, such as π or e, in the arithmetic expressions. Only use numbers and basic arithmetic operations that Python can interpret with the eval function.
-Again, when you provide the list of arithmetic expressions, that should be the entire response, and nothing else should be included in the response.
-
-4. If the question/problem does not require math calculation to provide an accurate answer, you can answer normally, and do not wrap your response with square brackets, like the examples below:
-
-Examples ("Q" indicates question, and below each is an answer):
-
-Q: What is the sum of the interior angles of a triangle?
-The sum of the interior angles of a triangle is always 180 degrees.
-
-Q: What is the name for a polygon with five sides?
-A polygon with five sides is called a pentagon.
-
-When answering in this format, do not include square brackets in your answer as they will only be used when responding the list of arithmetic expressions.
-
-5. If the question/problem is incomplete, unclear to answer, or unsolvable, ask for clarification or explain why you cannot answer/solve it.
-'''
-
-WAIT_MESSAGE = "Got your request. Please wait."
+WAIT_MESSAGE = "Got your request. Please wait..."
 N_CHUNKS_TO_CONCAT_BEFORE_UPDATING = 20
 MAX_TOKENS = 8192
 
@@ -92,7 +65,11 @@ def process_conversation_history(conversation_history, bot_user_id):
         role = "assistant" if message["user"] == bot_user_id else "user"
         message_text = process_message(message, bot_user_id)
         if message_text:
-            messages.append({"role": role, "content": message_text})
+            message_data = {"role": role, "content": message_text}
+            # Store the timestamp of the message in the assistant message data
+            if role == "assistant":
+                message_data["ts"] = message["ts"]
+            messages.append(message_data)
     return messages
 
 
