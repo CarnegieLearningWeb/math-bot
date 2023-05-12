@@ -19,6 +19,16 @@ from utils import (N_CHUNKS_TO_CONCAT_BEFORE_UPDATING, OPENAI_API_KEY, MAX_TOKEN
 app = App(token=SLACK_BOT_TOKEN)
 openai.api_key = OPENAI_API_KEY
 
+# Debug mode
+DEBUG = False
+
+def debug_print(*args, **kwargs):
+    if DEBUG:
+        print(*args, **kwargs)
+
+# keys: ts (message timestamp), values: {category: number, expressions: string (optional)}
+message_category = {}
+
 class Category(Enum):
     UNDEFINED = 0
     CALCULATION_BASED = 1
@@ -172,10 +182,34 @@ def convert_arithmetic_expressions(input_str):
 
 def make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category=Category.UNDEFINED.value,
                         is_calculated=False, num_failed_attempts=0):
+    altered_messages = []
+
+    if system_prompt_category == Category.UNDEFINED.value:
+        for message in messages:
+            altered_messages.append({"role": message["role"], "content": message["content"]})
+            ts = message.get("ts")
+            if ts and message_category.get(ts) is not None:
+                altered_messages[-1]["content"] = str(message_category[ts]["category"])
+    elif system_prompt_category == Category.CALCULATION_BASED.value and is_calculated is False:
+        for message in messages:
+            altered_messages.append({"role": message["role"], "content": message["content"]})
+            ts = message.get("ts")
+            if ts and message_category.get(ts) is not None and message_category[ts].get("expressions") is not None:
+                altered_messages[-1]["content"] = message_category[ts]["expressions"]
+    else:
+        for message in messages:
+            altered_messages.append({"role": message["role"], "content": message["content"]})
+
+    # For debugging
+    debug_print("\n\nCategory:", system_prompt_category, "  IsCalculated:", is_calculated)
+    debug_print("  Altered Messages:")
+    for msg in altered_messages:
+        debug_print(f'    {msg["role"].title()}: {msg["content"][:60]}')
+
     openai_response = openai.ChatCompletion.create(
         model="gpt-4",
-        temperature=0.2,
-        messages=messages,
+        temperature=0.4,
+        messages=altered_messages,
         stream=True
     )
     response_text = ""
@@ -195,28 +229,34 @@ def make_openai_request(messages, channel_id, reply_message_ts, system_prompt_ca
                     system_prompt_category = int(response_text)
                     altered_system_prompt = get_altered_system_prompt(system_prompt_category)
                     if altered_system_prompt:
+                        message_category[reply_message_ts] = {"category": system_prompt_category}
                         messages[0]["content"] = altered_system_prompt
                         return make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category,
                                                     is_calculated=False, num_failed_attempts=num_failed_attempts)
             elif system_prompt_category == Category.CALCULATION_BASED.value and is_calculated is False:
                 if response_text.startswith("[") and response_text.endswith("]"):
                     equations = convert_arithmetic_expressions(response_text)
+                    # Equations
+                    debug_print("\nEquations:\n", equations)
                     altered_system_prompt = get_altered_system_prompt(system_prompt_category, is_calculated=True, equations=equations)
                     if altered_system_prompt:
+                        message_category[reply_message_ts]["expressions"] = response_text
                         messages[0]["content"] = altered_system_prompt
                         update_chat(app, channel_id, reply_message_ts, f"Performing calculation{'.' * ((ii % 3) + 1)}")
                         return make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category,
                                                     is_calculated=True, num_failed_attempts=num_failed_attempts)
             else:
+                # Final response
+                debug_print("\nFinal Response:", response_text)
                 return update_chat(app, channel_id, reply_message_ts, response_text)
             
-            # If something unexpected happens, start over using the original system prompt
+            # If something unexpected happens, start over using the original system prompt with the last 3 (reduces by 1) messages
             if num_failed_attempts < MAX_FAILED_ATTEMPTS:
                 update_chat(app, channel_id, reply_message_ts, FAILED_ATTEMPT_MESSAGE)
                 messages[0]["content"] = SYSTEM_PROMPT
                 return make_openai_request(messages[:1] + messages[num_failed_attempts - 3:] if len(messages) > 4 - num_failed_attempts else messages[:], 
-                                            channel_id, reply_message_ts, system_prompt_category=Category.UNDEFINED.value,
-                                            is_calculated=False, num_failed_attempts=num_failed_attempts+1)
+                                           channel_id, reply_message_ts, system_prompt_category=Category.UNDEFINED.value,
+                                           is_calculated=False, num_failed_attempts=num_failed_attempts+1)
             
             # If maximum failed attempts was reached, respond with an error message
             update_chat(app, channel_id, reply_message_ts, ERROR_MESSAGE)

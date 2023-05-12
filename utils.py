@@ -65,7 +65,11 @@ def process_conversation_history(conversation_history, bot_user_id):
         role = "assistant" if message["user"] == bot_user_id else "user"
         message_text = process_message(message, bot_user_id)
         if message_text:
-            messages.append({"role": role, "content": message_text})
+            message_data = {"role": role, "content": message_text}
+            # Store the timestamp of the message in the assistant message data
+            if role == "assistant":
+                message_data["ts"] = message["ts"]
+            messages.append(message_data)
     return messages
 
 
