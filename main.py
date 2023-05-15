@@ -194,8 +194,11 @@ def make_openai_request(messages, channel_id, reply_message_ts, system_prompt_ca
         for message in messages:
             altered_messages.append({"role": message["role"], "content": message["content"]})
             ts = message.get("ts")
-            if ts and message_category.get(ts) is not None and message_category[ts].get("expressions") is not None:
-                altered_messages[-1]["content"] = message_category[ts]["expressions"]
+            if ts and message_category.get(ts) is not None:
+                if message_category[ts].get("expressions") is not None:
+                    altered_messages[-1]["content"] = message_category[ts]["expressions"]
+                else:
+                    altered_messages[-1]["content"] = "[]"
     else:
         for message in messages:
             altered_messages.append({"role": message["role"], "content": message["content"]})
