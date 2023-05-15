@@ -15,14 +15,13 @@ Classify the user input according to the following categories and respond with o
 5. Off-topic: Statements or questions unrelated to math, including coding-related questions.
 6. Miscellaneous: Gibberish, unrelated questions, or difficult to classify inputs.
 
-Only consider the latest user input to classify the category.
 Again, only the category number should be your entire response, and nothing else should be included in the response.
 Let's work this out in a step by step way to be sure we have the right answer.
 """
 
 
 WAIT_MESSAGE = "Got your request. Please wait..."
-N_CHUNKS_TO_CONCAT_BEFORE_UPDATING = 20
+N_CHUNKS_TO_CONCAT_BEFORE_UPDATING = 10
 MAX_TOKENS = 8192
 
 

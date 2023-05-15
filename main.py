@@ -20,7 +20,7 @@ app = App(token=SLACK_BOT_TOKEN)
 openai.api_key = OPENAI_API_KEY
 
 # Debug mode
-DEBUG = False
+DEBUG = True
 
 def debug_print(*args, **kwargs):
     if DEBUG:
@@ -83,7 +83,6 @@ Q: What is 2 to the power of 3?
 2. Do not include expressions that cannot be calculated (e.g., algebraic expressions) because these expressions will be parsed and converted to equations by a Python function.
 3. For the same reason, avoid using mathematical constants or symbols, such as π or e, in the arithmetic expressions. Only use numbers and basic arithmetic operations that Python can interpret with the eval function. Convert mathematical constants or symbols to numbers when applicable.
 
-Only consider the latest user input to identify where calculation is needed.
 Again, when you provide the list of arithmetic expressions, that should be the entire response, and nothing else should be included in the response. If the list is empty, your response should be [].
 Let's work this out in a step by step way to be sure we have the right list of expressions.
 """
@@ -134,8 +133,8 @@ Let's work this out in a step by step way to be sure we have the right instructi
         altered_system_prompt = """
 You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
 
-1. If the user input is not related to math, say "I'm here to help with math-related questions. Can we focus on a math problem or concept?"
-2. If the user input is related to math but not directly (e.g., coding-related questions), say "My expertise is in math topics. Could we focus on a question that's directly related to math?"
+1. If the user input is not related to math, say something like "I'm here to help with math-related questions. Can we focus on a math problem or concept?"
+2. If the user input is related to math but not directly (e.g., coding-related questions), say something like "My expertise is in math topics. Could we focus on a question that's directly related to math?"
 3. If the user input is incomplete or unclear to answer, ask for clarification or explain why you cannot answer it.
 
 Let's work this out in a step by step way to be sure we have the right instructions for the student.
