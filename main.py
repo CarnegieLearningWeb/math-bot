@@ -20,7 +20,7 @@ app = App(token=SLACK_BOT_TOKEN)
 openai.api_key = OPENAI_API_KEY
 
 # Debug mode
-DEBUG = True
+DEBUG = False
 
 def debug_print(*args, **kwargs):
     if DEBUG:
