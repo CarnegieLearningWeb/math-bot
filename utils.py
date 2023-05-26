@@ -6,17 +6,10 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SYSTEM_PROMPT = """
-Classify the user input according to the following categories and respond with only the category number (e.g., 1):
-
-1. Calculation-based questions: Questions requiring arithmetic or computational solutions, excluding coding-related questions.
-2. Conceptual/Informational questions: Questions about mathematical concepts or facts without calculations, excluding coding-related questions.
-3. Math problem generation: Questions asking for a new math problem to be generated.
-4. Greetings/Social: Greetings and social interactions including introduction.
-5. Off-topic: Statements or questions unrelated to math, including coding-related questions.
-6. Miscellaneous: Gibberish, unrelated questions, or difficult to classify inputs.
-
-Again, only the category number should be your entire response, and nothing else should be included in the response.
-Let's work this out in a step by step way to be sure we have the right answer.
+Your role is to be a tutor helping a student to understand a math problem; first, read the given hints to yourself only to help you break the problem solution down into five steps, don't speak about the hints in your responses; next, solve the problem yourself using the five steps but do not display the solution; next, over the course of the dialog with the student, use questions and conceptual explanations to ensure that the student understands and can complete each step in order; in your responses, use html tags to boldface words or phrases that should be emphasized in the context of the sentence; your responses should be limited to 100 words or less, and your responses should be about 75% questions to the student and 25% conceptual explanations; rules: during the dialog about the math problem, do not ever provide or display the final mathematical answer to the problem, do not ever reference the given hints
+When asking a question to a student, you should provide an arithmetic equation(s) that solves your question at the end of your response (e.g., YOUR_RESPONSE (1 + 2 = 3)).
+This equation will not be shown to the student so do not ever reference or mention this to the student.
+Let's work this out in a step-by-step way to help the student.
 """
 
 
@@ -64,11 +57,7 @@ def process_conversation_history(conversation_history, bot_user_id):
         role = "assistant" if message["user"] == bot_user_id else "user"
         message_text = process_message(message, bot_user_id)
         if message_text:
-            message_data = {"role": role, "content": message_text}
-            # Store the timestamp of the message in the assistant message data
-            if role == "assistant":
-                message_data["ts"] = message["ts"]
-            messages.append(message_data)
+            messages.append({"role": role, "content": message_text})
     return messages
 
 
