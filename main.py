@@ -1,7 +1,9 @@
-import openai
+import math
 import os
+import re
+import openai
+from threading import Event
 from dotenv import load_dotenv
-from enum import Enum
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
@@ -12,7 +14,7 @@ SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
 from utils import (N_CHUNKS_TO_CONCAT_BEFORE_UPDATING, OPENAI_API_KEY, MAX_TOKENS,
-                   SLACK_APP_TOKEN, SLACK_BOT_TOKEN, WAIT_MESSAGE, SYSTEM_PROMPT,
+                   SLACK_APP_TOKEN, SLACK_BOT_TOKEN, WAIT_MESSAGE,
                    num_tokens_from_messages, process_conversation_history,
                    update_chat)
 
@@ -26,22 +28,13 @@ def debug_print(*args, **kwargs):
     if DEBUG:
         print(*args, **kwargs)
 
-# keys: ts (message timestamp), values: {category: number, expressions: string (optional)}
-message_category = {}
-
-class Category(Enum):
-    UNDEFINED = 0
-    CALCULATION_BASED = 1
-    CONCEPTUAL_INFORMATIONAL = 2
-    MATH_PROBLEM_GENERATION = 3
-    GREETINGS_SOCIAL = 4
-    OFF_TOPIC = 5
-    MISCELLANEOUS = 6
-
-MAX_FAILED_ATTEMPTS = 3
-FAILED_ATTEMPT_MESSAGE = "Apologies, there was an unexpected issue. We're attempting to process your request again..."
-ERROR_MESSAGE = "We're sorry, there was an error processing your request. Please report this issue to zlee@carnegielearning.com."
 MAX_TOKEN_MESSAGE = f"Apologies, but the maximum number of tokens ({format(MAX_TOKENS, ',')}) for this thread has been reached. Please start a new thread to continue discussing this topic."
+
+# A dictionary to store an event for each channel
+events = {}
+
+# keys: ts (message timestamp), values: equation string
+equation_dict = {}
 
 
 def get_conversation_history(channel_id, thread_ts):
@@ -52,161 +45,46 @@ def get_conversation_history(channel_id, thread_ts):
     )
 
 
-def get_altered_system_prompt(system_prompt_category, is_calculated=False, equations=""):
-    altered_system_prompt = ""
-    if system_prompt_category == Category.CALCULATION_BASED.value:
-        if is_calculated is False:
-            altered_system_prompt = """
-You are a researcher tasked with identifying where calculation is needed in the user input. Please follow these guidelines when answering:
-1. Do not perform the calculation. Instead, your entire response should be a list of the arithmetic expressions that need to be calculated step by step, separated by commas, and wrap them with square brackets, like the examples below:
+def process_equation(equation):
+    # Split the equation into left and right parts
+    parts = equation.split("=")
+    if len(parts) != 2:  # If equation can't be split into exactly two parts, return as is
+        return equation
 
-Examples ("Q" indicates question, and your entire response should start and end with square brackets as shown in the examples):
+    # Clean whitespaces
+    left, right = parts[0].replace(" ", ""), parts[1].strip()
 
-Q: What is 1 + 2?
-[1 + 2]
+    # Check if left is a number, or if right is not a number
+    if re.fullmatch(r"^-?\d+(\.\d+)?$", left) or not re.fullmatch(r"^-?\d+(\.\d+)?$", right):
+        return equation
 
-Q: What is the result of subtracting two times three from seven?
-[2 * 3, 7 - 2 * 3]
+    # Create a safe environment for eval and try to evaluate the left part
+    safe_env = dict(__builtins__=None, math=math)
+    try:
+        result = eval(left, safe_env)
+    except (NameError, SyntaxError, TypeError):
+        return equation
 
-Q: What is 1 + 2, and 3 + 4?
-[1 + 2, 3 + 4]
-
-Q: What is (1 + 2) * (3 + 4)?
-[1 + 2, 3 + 4, (1 + 2) * (3 + 4)]
-
-Q: What is "x" in the equation "1 + 2x = 7"?
-[7 - 1, (7 - 1) / 2]
-
-Q: What is 2 to the power of 3?
-[2 ** 3]
-
-2. Do not include expressions that cannot be calculated (e.g., algebraic expressions) because these expressions will be parsed and converted to equations by a Python function.
-3. For the same reason, avoid using mathematical constants or symbols, such as π or e, in the arithmetic expressions. Only use numbers and basic arithmetic operations that Python can interpret with the eval function. Convert mathematical constants or symbols to numbers when applicable.
-
-Again, when you provide the list of arithmetic expressions, that should be the entire response, and nothing else should be included in the response. If the list is empty, your response should be [].
-Let's work this out in a step by step way to be sure we have the right list of expressions.
-"""
-        else:
-            altered_system_prompt = f"""
-You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
-
-1. Provide step by step instructions on how to solve the problem, making use of the provided context of pre-calculated equations. Rather than giving the direct answer, demonstrate how you arrived at the answer through multiple steps.
-2. If the provided context is insufficient for accurately answering the question or solving the problem, respond with, "Sorry, I don't have enough information to solve that."
-3. Incorporate the context naturally in your responses without explicitly mentioning it. Make your responses seem as if you've performed the calculations yourself.
-
-Let's work this out in a step by step way to be sure we have the right instructions for the student.
-
-Context:
-{equations}
-"""
-    elif system_prompt_category == Category.CONCEPTUAL_INFORMATIONAL.value:
-        altered_system_prompt = """
-You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
-
-1. Explain the reason for your answer, or how you arrived at the answer in multiple steps when applicable.
-2. Provide the base knowledge for students to better understand your answer when applicable.
-3. If the question is incomplete, unclear to answer, or unsolvable, ask for clarification or explain why you cannot answer it.
-
-Let's work this out in a step by step way to be sure we have the right instructions for the student.
-"""
-    elif system_prompt_category == Category.MATH_PROBLEM_GENERATION.value:
-        altered_system_prompt = """
-You are a researcher tasked with generating math problems as requested in the user input. Follow these guidelines when generating:
-
-1. When generating math problems, ensure they can be explained and solved in a step-by-step manner. Adjust the difficulty of the problem according to the user's age or grade level if provided.
-2. For word problems, use language that is clear, easy to understand, and safe for K-12 students.
-3. If the user's request for a math problem is unclear or lacks necessary information, ask for clarification or provide an explanation of why the problem cannot be generated.
-
-Let's work this out in a step by step way to be sure we have the right problems for the student.
-"""
-    elif system_prompt_category == Category.GREETINGS_SOCIAL.value:
-        altered_system_prompt = """
-You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
-
-1. Maintain a friendly and engaging conversation with students.
-2. Encourage and motivate students to foster a positive attitude towards math when appropriate.
-3. Ensure all responses are safe and appropriate for K-12 students, and gently guide students to use respectful and appropriate language if necessary.
-
-Let's work this out in a step by step way to be sure we have the right instructions for the student.
-"""
-    elif system_prompt_category == Category.OFF_TOPIC.value:
-        altered_system_prompt = """
-You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
-
-1. If the user input is not related to math, say something like "I'm here to help with math-related questions. Can we focus on a math problem or concept?"
-2. If the user input is related to math but not directly (e.g., coding-related questions), say something like "My expertise is in math topics. Could we focus on a question that's directly related to math?"
-3. If the user input is incomplete or unclear to answer, ask for clarification or explain why you cannot answer it.
-
-Let's work this out in a step by step way to be sure we have the right instructions for the student.
-"""
-    elif system_prompt_category == Category.MISCELLANEOUS.value:
-        altered_system_prompt = """
-You are MathBot, a K-12 math tutor chatbot tasked with guiding students through math questions. Please follow these guidelines when answering:
-
-1. If the user input is an emotional interjection, empathize and provide supportive responses when appropriate.
-2. If the user input is gibberish (i.e., nonsensical or random characters), gently notify the user that the input was not understood and ask for a clear question or statement.
-3. If the user input is unclear or ambiguous but still appears to be an attempt at a meaningful question or statement, ask for clarification.
-
-Let's work this out in a step by step way to be sure we have the right instructions for the student.
-"""
-    return altered_system_prompt
+    # Format the result based on its type
+    if isinstance(result, int):
+        return f"{left}={result}"
+    elif isinstance(result, float):
+        truncated_result = int(result * 10000) / 10000
+        return f"{left}={truncated_result:.4f}…" if result != truncated_result else f"{left}={truncated_result}"
 
 
-def convert_arithmetic_expressions(input_str):
-    # Remove square brackets and split by comma
-    expressions = input_str[1:-1].split(", ")
-    output = []
-    for exp in expressions:
-        exp = exp.strip()
-        try:
-            # Validate expression with eval()
-            result = eval(exp)
-            # Format the result based on its type (integer or floating-point)
-            if isinstance(result, int):
-                formatted_result = str(result)
-            elif isinstance(result, float):
-                formatted_result = f"{result:.4f}".rstrip("0").rstrip(".")
-                if float(formatted_result) != result:
-                    formatted_result += "…"
-            else:
-                # If the result is not a number, skip this expression
-                continue
-            # Append the expression and its result to the output list
-            output.append(f"{exp} = {formatted_result}")
-        except:
-            # If the expression is invalid or cannot be evaluated, skip it
-            pass
-    return "\n".join(output)
-
-
-def make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category=Category.UNDEFINED.value,
-                        is_calculated=False, num_failed_attempts=0):
+def make_openai_request(messages, channel_id, reply_message_ts):
     altered_messages = []
 
-    if system_prompt_category == Category.UNDEFINED.value:
-        for message in messages:
-            altered_messages.append({"role": message["role"], "content": message["content"]})
-            ts = message.get("ts")
-            if ts and message_category.get(ts) is not None:
-                altered_messages[-1]["content"] = str(message_category[ts]["category"])
-    elif system_prompt_category == Category.CALCULATION_BASED.value and is_calculated is False:
-        for message in messages:
-            altered_messages.append({"role": message["role"], "content": message["content"]})
-            ts = message.get("ts")
-            if ts and message_category.get(ts) is not None:
-                if message_category[ts].get("expressions") is not None:
-                    altered_messages[-1]["content"] = message_category[ts]["expressions"]
-                else:
-                    altered_messages[-1]["content"] = "[]"
-    else:
-        for message in messages:
-            altered_messages.append({"role": message["role"], "content": message["content"]})
+    for message in messages:
+        altered_messages.append({"role": message["role"], "content": message["content"]})
+        ts = message.get("ts")
+        if ts and equation_dict.get(ts) is not None:
+            altered_messages[-1]["content"] += f" <<{equation_dict[ts]}>>"
 
-    # For debugging
-    debug_print("\n\nCategory:", system_prompt_category, "  IsCalculated:", is_calculated)
-    debug_print("  Altered Messages:")
-    for msg in altered_messages:
-        debug_print(f'    {msg["role"].title()}: {msg["content"][:60]}')
+    debug_print("Altered Messages:")
+    for msg in altered_messages[1:]:
+        debug_print(f'• {msg["role"].title()}: {msg["content"]}')
 
     openai_response = openai.ChatCompletion.create(
         model="gpt-4",
@@ -215,69 +93,63 @@ def make_openai_request(messages, channel_id, reply_message_ts, system_prompt_ca
         stream=True
     )
     response_text = ""
+    is_parsing = False
+    equation = ""
     ii = 0
     for chunk in openai_response:
         if chunk.choices[0].delta.get("content"):
             ii = ii + 1
-            response_text += chunk.choices[0].delta.content
-            if system_prompt_category == Category.CALCULATION_BASED.value and is_calculated is False and response_text.startswith("["):
-                update_chat(app, channel_id, reply_message_ts, f"Performing calculation{'.' * ((ii % 3) + 1)}")
-            elif ii > N_CHUNKS_TO_CONCAT_BEFORE_UPDATING:
+            token = chunk.choices[0].delta.content
+
+            # Parse and process the equation (hidden in the chat)
+            if not is_parsing:
+                if not token.endswith("<<"):
+                    response_text += token
+                else:
+                    is_parsing = True
+            else:
+                if not token.endswith(">>"):
+                    equation += token
+                else:
+                    equation = process_equation(equation)
+                    debug_print(f"Processed Equation: {equation}")
+                    equation_dict[reply_message_ts] = equation
+                    equation = ""
+                    is_parsing = False
+                                                    
+            if ii > N_CHUNKS_TO_CONCAT_BEFORE_UPDATING:
                 update_chat(app, channel_id, reply_message_ts, response_text)
                 ii = 0
         elif chunk.choices[0].finish_reason == "stop":
-            if system_prompt_category == Category.UNDEFINED.value:
-                if response_text.isdigit():
-                    system_prompt_category = int(response_text)
-                    altered_system_prompt = get_altered_system_prompt(system_prompt_category)
-                    if altered_system_prompt:
-                        message_category[reply_message_ts] = {"category": system_prompt_category}
-                        messages[0]["content"] = altered_system_prompt
-                        return make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category,
-                                                    is_calculated=False, num_failed_attempts=num_failed_attempts)
-            elif system_prompt_category == Category.CALCULATION_BASED.value and is_calculated is False:
-                if response_text.startswith("[") and response_text.endswith("]"):
-                    equations = convert_arithmetic_expressions(response_text)
-                    # Equations
-                    debug_print("\nEquations:\n", equations)
-                    altered_system_prompt = get_altered_system_prompt(system_prompt_category, is_calculated=True, equations=equations)
-                    if altered_system_prompt:
-                        message_category[reply_message_ts]["expressions"] = response_text
-                        messages[0]["content"] = altered_system_prompt
-                        update_chat(app, channel_id, reply_message_ts, f"Performing calculation{'.' * ((ii % 3) + 1)}")
-                        return make_openai_request(messages, channel_id, reply_message_ts, system_prompt_category,
-                                                    is_calculated=True, num_failed_attempts=num_failed_attempts)
-            else:
-                # Final response
-                debug_print("\nFinal Response:", response_text)
-                return update_chat(app, channel_id, reply_message_ts, response_text)
-            
-            # If something unexpected happens, start over using the original system prompt with the last 3 (reduces by 1) messages
-            if num_failed_attempts < MAX_FAILED_ATTEMPTS:
-                update_chat(app, channel_id, reply_message_ts, FAILED_ATTEMPT_MESSAGE)
-                messages[0]["content"] = SYSTEM_PROMPT
-                return make_openai_request(messages[:1] + messages[num_failed_attempts - 3:] if len(messages) > 4 - num_failed_attempts else messages[:], 
-                                           channel_id, reply_message_ts, system_prompt_category=Category.UNDEFINED.value,
-                                           is_calculated=False, num_failed_attempts=num_failed_attempts+1)
-            
-            # If maximum failed attempts was reached, respond with an error message
-            update_chat(app, channel_id, reply_message_ts, ERROR_MESSAGE)
+            update_chat(app, channel_id, reply_message_ts, response_text)
         elif chunk.choices[0].finish_reason == "length":
             update_chat(app, channel_id, reply_message_ts, response_text + "...\n\n" + MAX_TOKEN_MESSAGE)
 
 
 @app.event("app_mention")
 def command_handler(body, context):
+    channel_id = body["event"]["channel"]
+    thread_ts = body["event"].get("thread_ts", body["event"]["ts"])
+    bot_user_id = context["bot_user_id"]
+    slack_resp = app.client.chat_postMessage(
+        channel=channel_id,
+        thread_ts=thread_ts,
+        text=WAIT_MESSAGE
+    )
+    reply_message_ts = slack_resp["message"]["ts"]
+    
+    # If there's no event for this thread yet, create one and set it
+    if thread_ts not in events:
+        events[thread_ts] = Event()
+        events[thread_ts].set()
+
+    # Wait until the event is set, indicating that the previous message is done processing
+    events[thread_ts].wait()
+
+    # Clear the event to indicate that a new message is being processed
+    events[thread_ts].clear()
+
     try:
-        channel_id = body["event"]["channel"]
-        thread_ts = body["event"].get("thread_ts", body["event"]["ts"])
-        bot_user_id = context["bot_user_id"]
-        slack_resp = app.client.chat_postMessage(
-            channel=channel_id,
-            thread_ts=thread_ts,
-            text=WAIT_MESSAGE
-        )
-        reply_message_ts = slack_resp["message"]["ts"]
         conversation_history = get_conversation_history(channel_id, thread_ts)
         messages = process_conversation_history(conversation_history, bot_user_id)
         num_tokens = num_tokens_from_messages(messages)
@@ -289,6 +161,9 @@ def command_handler(body, context):
             channel=channel_id,
             thread_ts=thread_ts,
             text=f"I can't provide a response. Encountered an error:\n`\n{e}\n`")
+    finally:
+        # Set the event to indicate that this message is done processing
+        events[thread_ts].set()
 
 
 if __name__ == "__main__":
