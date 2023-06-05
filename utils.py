@@ -4,7 +4,6 @@ import tiktoken
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.getenv("SLACK_APP_TOKEN")
-OPENAI_ORG_KEY = os.getenv("OPENAI_ORG_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 SYSTEM_PROMPT = """

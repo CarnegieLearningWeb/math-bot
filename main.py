@@ -13,13 +13,12 @@ SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 SLACK_APP_TOKEN = os.environ["SLACK_APP_TOKEN"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
-from utils import (N_CHUNKS_TO_CONCAT_BEFORE_UPDATING, OPENAI_ORG_KEY, OPENAI_API_KEY,
+from utils import (N_CHUNKS_TO_CONCAT_BEFORE_UPDATING, OPENAI_API_KEY,
                    MAX_TOKENS, SLACK_APP_TOKEN, SLACK_BOT_TOKEN, WAIT_MESSAGE,
                    num_tokens_from_messages, process_conversation_history,
                    update_chat)
 
 app = App(token=SLACK_BOT_TOKEN)
-openai.organization = OPENAI_ORG_KEY
 openai.api_key = OPENAI_API_KEY
 
 # Debug mode
