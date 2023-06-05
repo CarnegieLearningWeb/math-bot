@@ -24,6 +24,7 @@ pip install -r requirements.txt
 ```bash
 SLACK_BOT_TOKEN=your_slack_bot_token
 SLACK_APP_TOKEN=your_slack_app_token
+OPENAI_ORG_KEY=your_openai_org_key
 OPENAI_API_KEY=your_openai_api_key
 ```
 See below how to get those.
