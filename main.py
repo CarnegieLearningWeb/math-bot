@@ -128,28 +128,28 @@ def make_openai_request(messages, channel_id, reply_message_ts):
 
 @app.event("app_mention")
 def command_handler(body, context):
-    channel_id = body["event"]["channel"]
-    thread_ts = body["event"].get("thread_ts", body["event"]["ts"])
-    bot_user_id = context["bot_user_id"]
-    slack_resp = app.client.chat_postMessage(
-        channel=channel_id,
-        thread_ts=thread_ts,
-        text=WAIT_MESSAGE
-    )
-    reply_message_ts = slack_resp["message"]["ts"]
-    
-    # If there's no event for this thread yet, create one and set it
-    if thread_ts not in events:
-        events[thread_ts] = Event()
-        events[thread_ts].set()
-
-    # Wait until the event is set, indicating that the previous message is done processing
-    events[thread_ts].wait()
-
-    # Clear the event to indicate that a new message is being processed
-    events[thread_ts].clear()
-
     try:
+        channel_id = body["event"]["channel"]
+        thread_ts = body["event"].get("thread_ts", body["event"]["ts"])
+        bot_user_id = context["bot_user_id"]
+        slack_resp = app.client.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text=WAIT_MESSAGE
+        )
+        reply_message_ts = slack_resp["message"]["ts"]
+    
+        # If there's no event for this thread yet, create one and set it
+        if thread_ts not in events:
+            events[thread_ts] = Event()
+            events[thread_ts].set()
+
+        # Wait until the event is set, indicating that the previous message is done processing
+        events[thread_ts].wait()
+
+        # Clear the event to indicate that a new message is being processed
+        events[thread_ts].clear()
+
         conversation_history = get_conversation_history(channel_id, thread_ts)
         messages = process_conversation_history(conversation_history, bot_user_id)
         num_tokens = num_tokens_from_messages(messages)
@@ -157,13 +157,17 @@ def command_handler(body, context):
         make_openai_request(messages, channel_id, reply_message_ts)
     except Exception as e:
         print(f"Error: {e}")
-        app.client.chat_postMessage(
-            channel=channel_id,
-            thread_ts=thread_ts,
-            text=f"I can't provide a response. Encountered an error:\n`\n{e}\n`")
+        try:
+            app.client.chat_postMessage(
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text=f"I can't provide a response. Encountered an error:\n`\n{e}\n`")
+        except Exception as e:
+            print(f"Error: {e}")
     finally:
         # Set the event to indicate that this message is done processing
-        events[thread_ts].set()
+        if "thread_ts" in locals() and thread_ts in events:
+            events[thread_ts].set()
 
 
 if __name__ == "__main__":
