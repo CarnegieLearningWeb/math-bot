@@ -80,7 +80,8 @@ def make_openai_request(messages, channel_id, reply_message_ts):
         altered_messages.append({"role": message["role"], "content": message["content"]})
         ts = message.get("ts")
         if ts and equation_dict.get(ts) is not None:
-            altered_messages[-1]["content"] += f" <<{equation_dict[ts]}>>"
+            for equation in equation_dict[ts]:
+                altered_messages[-1]["content"] += f" <<{equation}>>"
 
     debug_print("Altered Messages:")
     for msg in altered_messages[1:]:
@@ -113,7 +114,7 @@ def make_openai_request(messages, channel_id, reply_message_ts):
                 else:
                     equation = process_equation(equation)
                     debug_print(f"Processed Equation: {equation}")
-                    equation_dict[reply_message_ts] = equation
+                    equation_dict.setdefault(reply_message_ts, []).append(equation)
                     equation = ""
                     is_parsing = False
                                                     
